@@ -3,8 +3,10 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path"
@@ -112,72 +114,78 @@ func verifyToken(r *http.Request, apiSecret *jwt.HMACSHA) (string, string, error
 
 func (hs *HttpServer) handleUploadFileV2(r *http.Request, passNonce string) (cid.Cid, int, error) {
 	// Get the uploaded file
-	file, header, err := r.FormFile("file")
+	mr, err := r.MultipartReader()
 	if err != nil {
-		return cid.Cid{}, http.StatusBadRequest, err
+		return cid.Cid{}, http.StatusBadRequest, fmt.Errorf("invalid multipart request: %w", err)
 	}
-	defer file.Close()
 
-	log.Debugw("handle upload file", "filename", header.Filename)
-	fr := io.Reader(file)
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return cid.Cid{}, http.StatusBadRequest, err
+		}
+		if part.FormName() == "file" && part.FileName() != "" {
+			result, status, err := hs.processFilePart(part, passNonce)
+			part.Close()
+			if err != nil {
+				return cid.Cid{}, status, err
+			}
+			return result, status, nil
+		}
 
-	assetDir, err := hs.asset.AllocatePathWithSize(header.Size)
+		part.Close()
+	}
+
+	return cid.Cid{}, http.StatusBadRequest, errors.New("no file part found")
+}
+
+func (hs *HttpServer) processFilePart(part *multipart.Part, passNonce string) (cid.Cid, int, error) {
+	var reader io.Reader = part
+	fileName := part.FileName()
+
+	// 获取有指定大小空间的配置路径
+	assetDir, err := hs.asset.AllocatePathWithSize(0)
 	if err != nil {
 		log.Debugw("Allocate storage error", "error", err.Error())
-		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("can not allocate storage for file %s", err.Error())
+		return cid.Cid{}, http.StatusInsufficientStorage, fmt.Errorf("can not allocate storage for file %s", err.Error())
 	}
+	// 创建临时car文件存储目录
+	tempCarFile := path.Join(assetDir, uuid.NewString())
+	defer func() {
+		if removeErr := os.RemoveAll(tempCarFile); removeErr != nil {
+			log.Debugw("Failed to cleanup temp file", "path", tempCarFile, "error", removeErr.Error())
+		}
+	}()
 
-	assetTempDirPath := path.Join(assetDir, uuid.NewString())
-	if err = os.Mkdir(assetTempDirPath, 0755); err != nil {
-		log.Debugw("mkdir error", "error", err.Error())
-		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("mkdir fialed %s", err.Error())
-	}
-	defer os.RemoveAll(assetTempDirPath)
-
+	// 判断文件是否需要加密，并加密文件
 	if passNonce != "" {
-		enf, n, err := fscrypto.Encrypt(file, []byte(passNonce), assetTempDirPath)
+		reader, err = fscrypto.EncryptStream(part, []byte(passNonce))
 		if err != nil {
 			return cid.Cid{}, http.StatusInternalServerError, err
 		}
-		log.Debugf("encrypt file %s, size %d", header.Filename, n)
-		fr = enf
 	}
 
-	assetPath := path.Join(assetTempDirPath, header.Filename)
-	out, err := os.Create(assetPath)
-	if err != nil {
-		log.Debugw("create file error", "error", err.Error())
-		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("create file failed: %s, path: %s", err.Error(), assetPath)
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, fr); err != nil {
-		log.Debugw("copy file error", "error", err.Error())
-		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("save file failed: %s, path: %s", err.Error(), assetPath)
-	}
-
-	tempCarFile := path.Join(assetDir, uuid.NewString())
-	rootCID, err := carutil.CreateCar(assetPath, tempCarFile)
+	// 创建临时car文件存储目录
+	rootCID, err := carutil.CreateCarFromReaderWithPath(context.Background(), reader, fileName, tempCarFile)
 	if err != nil {
 		log.Debugw("create car error", "error", err.Error())
 		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("create car failed: %s, path: %s", err.Error(), tempCarFile)
 	}
-	defer os.RemoveAll(tempCarFile)
-
-	var isExists bool
-	if isExists, err = hs.asset.AssetExists(rootCID); err != nil {
+	exists, err := hs.asset.AssetExists(rootCID)
+	if err != nil {
 		log.Debugw("check asset exist error", "error", err.Error())
 		return cid.Cid{}, http.StatusInternalServerError, err
-	} else if isExists {
-		log.Debugf("asset %s already exist", rootCID.String())
-		// return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("asset %s already exist, file %s", rootCID.String(), header.Filename)
+	}
+	if exists {
 		return rootCID, http.StatusOK, nil
 	}
 
 	if err = hs.saveCarFile(context.Background(), tempCarFile, rootCID); err != nil {
-		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("save car file failed %s, file %s", err.Error(), header.Filename)
+		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("save car file failed %s, file %s", err.Error(), fileName)
 	}
-
 	return rootCID, http.StatusOK, nil
 }
 

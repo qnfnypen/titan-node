@@ -68,3 +68,20 @@ func Encrypt(r io.Reader, pass []byte, tempDir string) (io.Reader, int64, error)
 
 	return t, totalBytes, nil
 }
+
+// EncryptStream 加密流（使用 AES-CTR + md5 生成 key/iv）并返回 io.Reader
+func EncryptStream(r io.Reader, pass []byte) (io.Reader, error) {
+	// 1. 生成 key 和 iv
+	key := md5.Sum(pass)
+	iv := generateIVFromPass(pass)
+
+	// 2. 初始化 AES-CTR 加密流
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, err
+	}
+	stream := cipher.NewCTR(block, iv)
+
+	encryptedReader := &cipher.StreamReader{S: stream, R: r}
+	return encryptedReader, err
+}
