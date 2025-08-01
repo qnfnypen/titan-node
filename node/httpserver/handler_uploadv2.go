@@ -168,7 +168,6 @@ func (hs *HttpServer) processFilePart(part *multipart.Part, passNonce string) (c
 		}
 	}
 
-	// 创建临时car文件存储目录
 	rootCID, err := carutil.CreateCarFromReaderWithPath(context.Background(), reader, fileName, tempCarFile)
 	if err != nil {
 		log.Debugw("create car error", "error", err.Error())

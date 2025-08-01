@@ -245,13 +245,13 @@ func (a *asset) saveUserAsset(ctx context.Context, userID string, root cid.Cid, 
 		}
 	}
 
-	if err = a.verifyAsset(assetPath, root); err != nil {
-		// remove asset if verify failed
-		if e := os.Remove(assetPath); e != nil {
-			log.Errorf("remove asset %s error %s", assetPath, e.Error())
-		}
-		return xerrors.Errorf("verify car error: %w", err)
-	}
+	// if err = a.verifyAsset(assetPath, root); err != nil {
+	// 	// remove asset if verify failed
+	// 	if e := os.Remove(assetPath); e != nil {
+	// 		log.Errorf("remove asset %s error %s", assetPath, e.Error())
+	// 	}
+	// 	return xerrors.Errorf("verify car error: %w", err)
+	// }
 
 	return nil
 }
