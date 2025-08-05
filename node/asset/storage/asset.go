@@ -245,13 +245,13 @@ func (a *asset) saveUserAsset(ctx context.Context, userID string, root cid.Cid, 
 		}
 	}
 
-	// if err = a.verifyAsset(assetPath, root); err != nil {
-	// 	// remove asset if verify failed
-	// 	if e := os.Remove(assetPath); e != nil {
-	// 		log.Errorf("remove asset %s error %s", assetPath, e.Error())
-	// 	}
-	// 	return xerrors.Errorf("verify car error: %w", err)
-	// }
+	if err = a.verifyAsset(assetPath, root); err != nil {
+		// remove asset if verify failed
+		if e := os.Remove(assetPath); e != nil {
+			log.Errorf("remove asset %s error %s", assetPath, e.Error())
+		}
+		return xerrors.Errorf("verify car error: %w", err)
+	}
 
 	return nil
 }
@@ -447,4 +447,30 @@ func (a *asset) listBlocks(ctx context.Context, root cid.Cid) ([]cid.Cid, error)
 
 	return cidList, nil
 
+}
+
+func (a *asset) saveUserAssetWithPath(root cid.Cid, tempPath string, assetSize int64) error {
+	baseDir, err := a.assetsPaths.allocatePathWithAssetAndSize(root, assetSize)
+	if err != nil {
+		return err
+	}
+
+	// create file
+	name := a.generateAssetName(root)
+	assetPath := filepath.Join(baseDir, name)
+
+	// 由于配置只有一个目录，因此在同目录下
+	if err = os.Rename(tempPath, assetPath); err != nil {
+		return err
+	}
+
+	if err = a.verifyAsset(assetPath, root); err != nil {
+		// remove asset if verify failed
+		if e := os.Remove(assetPath); e != nil {
+			log.Errorf("remove asset %s error %s", assetPath, e.Error())
+		}
+		return xerrors.Errorf("verify car error: %w", err)
+	}
+
+	return nil
 }

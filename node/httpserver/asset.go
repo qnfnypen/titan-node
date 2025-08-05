@@ -21,6 +21,8 @@ type Asset interface {
 	GetBlock(ctx context.Context, root, block cid.Cid) (blocks.Block, error)
 	// SaveUserAsset save user asset to local
 	SaveUserAsset(ctx context.Context, userID string, root cid.Cid, assetSize int64, r io.Reader) error
+	// SaveUserAsset save user asset to local by template file
+	SaveUserAssetWithPath(ctx context.Context, root cid.Cid, tempPath string, assetSize int64) error
 	// SetAssetUploadProgress set progress of upload for asset
 	SetAssetUploadProgress(ctx context.Context, root cid.Cid, progress *types.UploadProgress) error
 	// GetUploadingAsset get asset which uploading

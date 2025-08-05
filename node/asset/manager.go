@@ -728,6 +728,10 @@ func (m *Manager) SaveUserAsset(ctx context.Context, userID string, root cid.Cid
 	return nil
 }
 
+func (m *Manager) SaveUserAssetWithPath(ctx context.Context, root cid.Cid, tempPath string, assetSize int64) error {
+	return m.Storage.StoreUserAssetWithPath(ctx, root, tempPath, assetSize)
+}
+
 func (m *Manager) SetAssetUploadProgress(ctx context.Context, root cid.Cid, progress *types.UploadProgress) error {
 	log.Debugf("SetAssetUploadProgress %s %d/%d", root.String(), progress.DoneSize, progress.TotalSize)
 

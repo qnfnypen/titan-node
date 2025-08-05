@@ -142,6 +142,10 @@ func (m *Manager) StoreUserAsset(ctx context.Context, userID string, root cid.Ci
 	return m.asset.saveUserAsset(ctx, userID, root, assetSize, r)
 }
 
+func (m *Manager) StoreUserAssetWithPath(ctx context.Context, root cid.Cid, tempPath string, assetSize int64) error {
+	return m.asset.saveUserAssetWithPath(root, tempPath, assetSize)
+}
+
 // GetAsset retrieves an asset
 func (m *Manager) GetAsset(root cid.Cid) (io.ReadSeekCloser, error) {
 	return m.asset.get(root)

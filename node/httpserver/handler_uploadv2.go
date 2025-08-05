@@ -168,7 +168,7 @@ func (hs *HttpServer) processFilePart(part *multipart.Part, passNonce string) (c
 		}
 	}
 
-	rootCID, err := carutil.CreateCarFromReaderWithPath(context.Background(), reader, fileName, tempCarFile)
+	rootCID, err := carutil.WriteReaderToFile(context.Background(), reader, tempCarFile)
 	if err != nil {
 		log.Debugw("create car error", "error", err.Error())
 		return cid.Cid{}, http.StatusInternalServerError, fmt.Errorf("create car failed: %s, path: %s", err.Error(), tempCarFile)
@@ -201,8 +201,8 @@ func (hs *HttpServer) saveCarFile(ctx context.Context, tempCarFile string, root 
 		log.DPanicw("get car file size error", "error", err.Error())
 		return err
 	}
-	log.Debugf("car file size %d", fInfo.Size())
-	if err := hs.asset.SaveUserAsset(ctx, uuid.NewString(), root, fInfo.Size(), f); err != nil {
+	log.Debugf("template car file path:%v car file size %d", tempCarFile, fInfo.Size())
+	if err := hs.asset.SaveUserAssetWithPath(ctx, root, tempCarFile, fInfo.Size()); err != nil {
 		log.Debugw("save asset error", "error", err.Error())
 		return err
 	}
